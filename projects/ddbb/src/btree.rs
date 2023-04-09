@@ -63,13 +63,14 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
-const B: usize = 3;
+const B: usize = 3; // minimum degree
 
+#[derive(Clone, Debug)]
 pub struct BTree<K: Ord + Clone + Debug, V: Clone + Debug> {
     root: Option<Box<Node<K, V>>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Node<K: Ord + Clone + Debug, V: Clone + Debug> {
     keys: Vec<K>,
     values: Vec<V>,
@@ -81,9 +82,14 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> BTree<K, V> {
         BTree { root: None }
     }
 
+    pub fn print(&self) {
+        if let Some(root) = &self.root {
+            root.print(0);
+        }
+    }
+
     pub fn insert(&mut self, key: K, value: V) {
         // Insert key-value pair and handle tree updates
-        println!("Before insert: {:?}", key);
         if let Some(root) = &mut self.root { // if root is not None
             // if let patten is checking whether self.root is of type Option<T> and whether it is
             // Some, if it is, then the value inside the Some variant is bound to the var root
@@ -92,7 +98,6 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> BTree<K, V> {
                 // split it before inserting
                 let mut new_root = Box::new(Node::new());
                 new_root.children.push(root.clone()); 
-                // at least an internal node will have 1 children
                 new_root.split_child(0);
                 new_root.insert_non_full(key.clone(), value.clone());
                 self.root = Some(new_root);
@@ -101,19 +106,22 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> BTree<K, V> {
             }
         } else {
             let mut new_root = Box::new(Node::new());
-            new_root.keys.push(key.clone());
-            new_root.values.push(value).clone();
+            new_root.insert_non_full(key.clone(), value.clone());
             self.root = Some(new_root)
             // the Some is just a wrapper, it set the Option of new_root to be Some
         }
-        println!("After insert: {:?}", key);
     }
 
     pub fn delete(&mut self, key: &K) -> Option<V> {
+        println!("Deleting {:?} from root", key);
         if let Some(root) = &mut self.root {
             let deleted_value = root.delete(key);
-            if root.keys.is_empty() && !root.children.is_empty() {
-                self.root = Some(root.children.remove(0));
+            if root.keys.is_empty() {
+                if root.children.is_empty() {
+                    self.root = None;
+                } else {
+                    self.root = Some(root.children.remove(0));
+                }
             }
             deleted_value
         } else {
@@ -144,6 +152,14 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
             keys: Vec::new(),
             values: Vec::new(),
             children: Vec::new(),
+        }
+    }
+
+    fn print(&self, depth: usize) {
+        let indent = "  ".repeat(depth);
+        println!("{}{:?} {:?}", indent, self.keys, self.values);
+        for child in &self.children {
+            child.print(depth + 1);
         }
     }
 
@@ -178,6 +194,10 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
         // (greater part)
         right.keys = self.children[index].keys.split_off(B); // second half of the keys
         right.values = self.children[index].values.split_off(B);
+
+        self.children[index].keys.remove(B-1);
+        self.children[index].values.remove(B-1);
+
         // now the self.children[index] becomes the first half of the keys (left)
 
         if !self.children[index].children.is_empty() {
@@ -227,7 +247,6 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                     index += 1;
                 }
             }
-            println!("Insert non-full: {:?}", key);
             self.children[index].insert_non_full(key, value);
         }
     }
@@ -239,6 +258,7 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                 if self.children.is_empty() {
                     None
                 } else {
+                    println!("Searching value '{:?}' in node: {:?}, next index: {:?}", key, self.values, index);
                     self.children[index].search(key)
                 }
             }
@@ -246,11 +266,14 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
     }
 
     pub fn delete(&mut self, key: &K) -> Option<V> {
+        println!("Deleting key '{:?}' from node: {:?}", key, self.keys);
         match self.keys.binary_search(&key) {
             Ok(index) => {
+                println!("Found key at index: {:?}", index);
                 if self.children.is_empty() {
                     // Case 1: The key is in the current node and it's a leaf node
                     // Then we just simply remove the key and value
+                    println!("Case 1: The key '{:?}' is on the leaf node, remove it directly.", key);
                     self.keys.remove(index);
                     return Some(self.values.remove(index));
                 } else {
@@ -271,6 +294,7 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                         * smaller than the key at index (keys). that is called the left part of tree.
                         */
                         let (pred_key, pred_value) = self.children[index].find_predecessor();
+                        println!("Case 2a: The key '{:?}' is deleted since it is on the internal node", key);
                         self.keys[index] = pred_key.clone();
                         self.values[index] = pred_value.clone();
                         return self.children[index].delete(&pred_key); // recursive
@@ -281,6 +305,7 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                         // the key and its value in the current node, and then recursively delete
                         // the successor key from the left child.
                         let (succ_key, succ_value) = self.children[index + 1].find_successor();
+                        println!("Case 2b: The key '{:?}' is deleted since it is on the internal node", key);
                         self.keys[index] = succ_key.clone();
                         self.values[index] = succ_value.clone();
                         return self.children[index + 1].delete(&succ_key); // recursive
@@ -311,15 +336,21 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                         *
                         * Then we perform delete on that left child.
                         */
+                        println!("Case 2c: The key '{:?}' is removed on merge_with_left, \
+                            and we move our left and right sibling together", key);
                         self.merge_with_left(index+1); 
+                        self.children.remove(index+1);
                         return self.children[index].delete(key);
                     }
                 }
             }
+
             Err(index) => {
                 // Case 3: The key is not in the current node
+                println!("Case 3: The key '{:?}' is not in the current node, the desired index is {:?}", key, index);
                 if self.children.is_empty() {
                     // Case 3a: If the current node is a leaf node, then the key is not in the tree
+                    println!("Case 3a: If the current node is a leaf node, then the key is not in the tree, NOT FOUND");
                     return None;
                 } else {
                     // Case 3b: If the current node is an internal node, we need to ensure that the
@@ -329,20 +360,36 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                         if index > 0 && self.children[index - 1].keys.len() >= B {
                             // Case 3b1: If the left sibling (at index-1) exists and has at least B
                             // keys, borrow a key from the left sibling
+                            println!("Case 3b1: If the left sibling (at index-1) exists and has at least B keys, borrow a key from the left sibling");
                             self.borrow_from_left(index);
+                            let borrowed_key = self.keys.remove(index);
+                            let borrowed_value = self.values.remove(index);
+                            self.children[index].keys.insert(0, borrowed_key);
+                            self.children[index].values.insert(0, borrowed_value);
                         } else if index < self.children.len() - 1 && self.children[index + 1].keys.len() >= B {
                             // Case 3b2: If the right sibling (at index+1) exists and has at least
                             // B keys, borrow a key from the right sibling
+                            println!("Case 3b2: If the right sibling (at index+1) exists and has at least B keys, borrow a key from the right sibling");
                             self.borrow_from_right(index);
+                            let borrowed_key = self.keys.remove(index);
+                            let borrowed_value = self.values.remove(index);
+                            self.children[index].keys.push(borrowed_key);
+                            self.children[index].values.push(borrowed_value);
                         } else if index > 0 {
                             // Case 3b3: if the left sibling exists but has less than B keys, merge the child
                             // with the left sibling
+                            println!("Case 3b3: if the left sibling exists but has less than B keys, merge the child with the left sibling");
                             self.merge_with_left(index);
+                            self.children.remove(index);
+                            return self.children[index-1].delete(key);
                         } else {
                             // Case 3b4: if the left sibling doesn't exist, merge the child with the right sibling
+                            println!("Case 3b4: if the left sibling doesn't exist, merge the child with the right sibling");
                             self.merge_with_right(index);
+                            self.children.remove(index+1);
                         }
                     }
+
                     // Case 3c: After ensuring the child at index, and that child has enough keys,
                     // recursively call the delete method on the child.
                     self.children[index].delete(key)
@@ -356,17 +403,19 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
     fn borrow_from_left(&mut self, index: usize) {
         // Borrow a key from the left sibling, assuming that the left sibling has more than B-1 keys
 
-        let left_sibling = &mut self.children[index - 1];
         // since it is the right most child, it will not violate the navigational property
-        let left_sibling_key = left_sibling.keys.pop().unwrap();
+
+        let left_sibling = &mut self.children[index - 1];
+        let left_sibling_key = left_sibling.keys.pop().unwrap(); // largest
         let left_sibling_value = left_sibling.values.pop().unwrap();
+
         self.keys.insert(index - 1, left_sibling_key);
         self.values.insert(index - 1, left_sibling_value);
 
         // Move the rightmost child of the left sibling to the leftmost child of the current node
         if !left_sibling.children.is_empty() {
             let left_sibling_child = left_sibling.children.pop().unwrap();
-            self.children.insert(0, left_sibling_child);
+            self.children[index].children.insert(0, left_sibling_child);
         }
     }
 
@@ -376,13 +425,16 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
         let right_sibling = &mut self.children[index + 1];
         let right_sibling_key = right_sibling.keys.remove(0);
         let right_sibling_value = right_sibling.values.remove(0);
+
+        println!("right_sibling_key: {:?}", right_sibling_key);
         self.keys.insert(index, right_sibling_key);
         self.values.insert(index, right_sibling_value);
+        println!("self.keys: {:?}", self.keys);
 
         // Move the leftmost child of the right sibling to the rightmost child of the current node
         if !right_sibling.children.is_empty() {
             let right_sibling_child = right_sibling.children.remove(0);
-            self.children.push(right_sibling_child);
+            self.children[index].children.push(right_sibling_child);
         }
     }
 
@@ -393,10 +445,13 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
         let parent_key = self.keys.remove(index - 1);
         let parent_value = self.values.remove(index - 1);
 
-        let (left_children, right_children) = self.children.split_at_mut(index - 1);
+        let (left_children, right_children) = self.children.split_at_mut(index);
 
         let left_sibling = &mut left_children[index - 1]; // merge the current node with the left sibling
+        println!("left_sibling.keys: {:?}", left_sibling.keys);
+
         let current_node = &mut right_children[0];        // the right child of the key you want to delete
+        println!("current_node.keys: {:?}", current_node.keys);
 
         // 2. move the deleted key and value to the left sibling, as well as the right child keys
         // so after that the left sibling will have 2B-1 keys in total
@@ -407,6 +462,8 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
         left_sibling.keys.append(&mut current_node.keys);
         left_sibling.values.append(&mut current_node.values);
 
+        println!("left_sibling.keys: {:?}", left_sibling.keys);
+
         if !current_node.children.is_empty() {
             left_sibling.children.append(&mut current_node.children);
         }
@@ -414,17 +471,19 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
 
     fn merge_with_right(&mut self, index: usize) {
         // Merge the current node with the right sibling, assuming that the right sibling has B-1 keys
-        // Move the key and value at index in the parent node down to the current node
-        
         let parent_key = self.keys.remove(index);
         let parent_value = self.values.remove(index);
-        self.keys.push(parent_key);
-        self.values.push(parent_value);
+
 
         // Split children at index to create two mutable slices without overlapping
-        let (left_children, right_children) = self.children.split_at_mut(index);
+        let (left_children, right_children) = self.children.split_at_mut(index+1);
+        
         let current_node = &mut left_children[index];
-        let right_sibling = &mut right_children[1];
+
+        let right_sibling = &mut right_children[0];
+
+        current_node.keys.push(parent_key);
+        current_node.values.push(parent_value);
 
         // Move all keys, values, and children from the right sibling to the current node
         current_node.keys.append(&mut right_sibling.keys);
@@ -433,6 +492,7 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
         if !right_sibling.children.is_empty() {
             current_node.children.append(&mut right_sibling.children);
         }
+
     }
 
     fn find_predecessor(&self) -> (K, V) {
@@ -477,7 +537,6 @@ mod tests {
         for (key, value) in keys.iter().zip(values.iter()) {
             btree.insert(*key, *value);
         }
-
         btree
     }
 
@@ -518,12 +577,257 @@ mod tests {
     #[test]
     fn test_delete_key() {
         let mut btree = create_btree();
+
+        println!("B-Tree after create_btree");
+        btree.print();
+
+        btree.delete(&"d");
         btree.delete(&"g");
         btree.delete(&"b");
         btree.delete(&"a");
 
+        assert_eq!(btree.search(&"d"), None);
         assert_eq!(btree.search(&"g"), None);
         assert_eq!(btree.search(&"b"), None);
         assert_eq!(btree.search(&"a"), None);
     }
+
+    #[test]
+    fn test_delete_without_borrow_or_merge() {
+        let mut btree = create_btree();
+
+        // Delete a key that doesn't require borrowing or merging nodes
+        btree.print();
+
+        // Check if other keys are still present and correct
+        let remaining_keys = ["a", "c", "f", "i", "j", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "v", "x", "y", "z"];
+        let remaining_values = [1, 3, 6, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 24, 25, 26];
+        for (key, value) in remaining_keys.iter().zip(remaining_values.iter()) {
+            assert_eq!(btree.search(key), Some(value));
+        }
+    }
+
+    #[test]
+    fn test_delete_from_root() {
+        let mut btree = create_btree();
+        
+        println!("B-Tree before delete");
+        btree.print();
+        
+        // Delete root key
+        btree.delete(&"m");
+        
+        println!("B-Tree after delete");
+        btree.print();
+        
+        assert_eq!(btree.search(&"m"), None);
+    }
+
+    #[test]
+    fn test_delete_all_keys() {
+        let mut btree = create_btree();
+
+        let keys = ["g", "m", "p", "x", "a", "c", "d", "f", "i", "j", "k", "l", "n", "o", "r", "s", "t", "u", "v", "y", "z"];
+
+        println!("B-Tree before delete");
+        btree.print();
+
+        for key in keys.iter() {
+            btree.print();
+            btree.delete(key);
+        }
+
+        println!("B-Tree after delete");
+        btree.print();
+
+        for key in keys.iter() {
+            assert_eq!(btree.search(key), None);
+        }
+    }
+
+    #[test]
+    fn test_delete_and_insert() {
+        let mut btree = create_btree();
+
+        println!("B-Tree before delete");
+        btree.print();
+
+        btree.delete(&"g");
+        btree.delete(&"m");
+
+        println!("B-Tree after delete");
+        btree.print();
+
+        btree.insert("g", 7);
+        btree.insert("m", 13);
+
+        println!("B-Tree after insert");
+        btree.print();
+
+        assert_eq!(btree.search(&"g"), Some(&7));
+        assert_eq!(btree.search(&"m"), Some(&13));
+    }
+
+    #[test]
+    fn test_delete_key_not_present() {
+        let mut btree = create_btree();
+
+        println!("B-Tree before delete");
+        btree.print();
+
+        // Delete a key that's not in the tree
+        btree.delete(&"b");
+
+        println!("B-Tree after delete");
+        btree.print();
+
+        assert_eq!(btree.search(&"b"), None);
+    }
+
+    fn create_large_btree() -> BTree<&'static str, i32> {
+        let mut btree = BTree::new();
+
+        let keys = [
+            "g", "m", "p", "x", "a", "c", "d", "f", "i", "j", "k", "l", "n", "o", "r", "s", "t", "u", "v",
+            "y", "z", "b", "e", "h", "q", "w", "aa", "ab", "ac", "ad", "ae", "af", "ag", "ah", "ai",
+        ];
+        let values: Vec<i32> = (1..=keys.len() as i32).collect();
+
+        for (key, value) in keys.iter().zip(values.iter()) {
+            btree.insert(*key, *value);
+        }
+        btree
+    }
+
+    #[test]
+    fn test_delete_key_large_tree() {
+        let mut btree = create_large_btree();
+
+        println!("Large B-Tree before delete");
+        btree.print();
+
+        btree.delete(&"d");
+        btree.delete(&"g");
+        btree.delete(&"b");
+        btree.delete(&"a");
+        btree.delete(&"ae");
+        btree.delete(&"af");
+        btree.delete(&"ag");
+        btree.delete(&"ah");
+        btree.delete(&"ai");
+
+        btree.print();
+
+        assert_eq!(btree.search(&"d"), None);
+        assert_eq!(btree.search(&"g"), None);
+        assert_eq!(btree.search(&"b"), None);
+        assert_eq!(btree.search(&"a"), None);
+        assert_eq!(btree.search(&"ae"), None);
+        assert_eq!(btree.search(&"af"), None);
+        assert_eq!(btree.search(&"ag"), None);
+        assert_eq!(btree.search(&"ah"), None);
+        assert_eq!(btree.search(&"ai"), None);
+    }
+
+    #[test]
+    fn test_delete_internal_node_replace_predecessor_successor() {
+        let mut btree = BTree::new();
+        btree.insert("m", 13);
+        btree.insert("g", 7);
+        btree.insert("p", 16);
+        btree.insert("d", 4);
+        btree.insert("j", 10);
+        btree.insert("n", 14);
+        btree.insert("t", 20);
+
+        // Deleting "m" will require replacing it with the predecessor key ("j").
+        btree.delete(&"m");
+        assert_eq!(btree.search(&"m"), None);
+    }
+
+    #[test]
+    fn test_delete_key_requires_merge() {
+        let mut btree = BTree::new();
+        btree.insert("m", 13);
+        btree.insert("g", 7);
+        btree.insert("p", 16);
+        btree.insert("d", 4);
+        btree.insert("j", 10);
+        btree.insert("n", 14);
+        btree.insert("t", 20);
+
+        // Delete "d" and "g" to force a merge operation
+        btree.delete(&"d");
+        btree.delete(&"g");
+
+        // Assert keys are deleted
+        assert_eq!(btree.search(&"d"), None);
+        assert_eq!(btree.search(&"g"), None);
+    }
+
+    #[test]
+    fn test_delete_key_requires_borrow() {
+        let mut btree = BTree::new();
+        btree.insert("m", 13);
+        btree.insert("g", 7);
+        btree.insert("p", 16);
+        btree.insert("d", 4);
+        btree.insert("j", 10);
+        btree.insert("n", 14);
+        btree.insert("t", 20);
+        btree.insert("a", 1);
+        btree.insert("c", 3);
+        btree.insert("f", 6);
+        btree.insert("i", 9);
+        btree.insert("k", 11);
+        btree.insert("o", 15);
+        btree.insert("r", 18);
+        btree.insert("s", 19);
+        btree.print();    
+
+        // Delete "m", "p", and "t" to force borrow operations
+        btree.delete(&"m");
+        btree.print();    
+        btree.delete(&"p");
+        btree.print();    
+        btree.delete(&"t");
+        btree.print();    
+
+        // Assert keys are deleted
+        assert_eq!(btree.search(&"m"), None);
+        assert_eq!(btree.search(&"p"), None);
+        assert_eq!(btree.search(&"t"), None);
+    }
+
+    #[test]
+    fn test_large_insert_delete() {
+        let mut tree = BTree::<String, i32>::new();
+        let keys: Vec<String> = (1..500).map(|i| i.to_string()).collect();
+        let values: Vec<i32> = (1..500).collect();
+
+        for (key, value) in keys.iter().zip(values.iter()) {
+            tree.insert(key.clone(), *value);
+        }
+
+        println!("B-Tree after create");
+        tree.print();
+
+        for (key, value) in keys.iter().zip(values.iter()) {
+            assert_eq!(tree.search(&key), Some(value));
+        }
+
+        println!("B-Tree before delete");
+        tree.print();
+
+        for key in keys.iter() {
+            tree.print();
+            tree.delete(key);
+        }
+
+        for key in keys.iter() {
+            assert_eq!(tree.search(&key), None);
+        }
+    }
+
+
 }
