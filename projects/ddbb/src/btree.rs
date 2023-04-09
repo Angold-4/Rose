@@ -371,8 +371,8 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> Node<K, V> {
                             // B keys, borrow a key from the right sibling
                             println!("Case 3b2: If the right sibling (at index+1) exists and has at least B keys, borrow a key from the right sibling");
                             self.borrow_from_right(index);
-                            let borrowed_key = self.keys.remove(index);
-                            let borrowed_value = self.values.remove(index);
+                            let borrowed_key = self.keys.remove(index+1);
+                            let borrowed_value = self.values.remove(index+1);
                             self.children[index].keys.push(borrowed_key);
                             self.children[index].values.push(borrowed_value);
                         } else if index > 0 {
@@ -802,8 +802,8 @@ mod tests {
     #[test]
     fn test_large_insert_delete() {
         let mut tree = BTree::<String, i32>::new();
-        let keys: Vec<String> = (1..500).map(|i| i.to_string()).collect();
-        let values: Vec<i32> = (1..500).collect();
+        let keys: Vec<String> = (1..1000).map(|i| i.to_string()).collect();
+        let values: Vec<i32> = (1..1000).collect();
 
         for (key, value) in keys.iter().zip(values.iter()) {
             tree.insert(key.clone(), *value);
