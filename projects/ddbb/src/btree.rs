@@ -87,6 +87,36 @@ impl<K: Ord + Clone + Debug, V: Clone + Debug> BTree<K, V> {
         }
     }
 
+    pub fn traverse(&self) -> Vec<(K, V)> 
+    where
+        K: Clone,
+        V: Clone,
+    {
+        let mut kv_pairs = Vec::new();
+        if let Some(root) = &self.root {
+            Self::dfs(&**root, &mut kv_pairs);
+        }
+        kv_pairs
+    }
+
+    // Add the dfs() method as an associated function
+    fn dfs(node: &Node<K, V>, kv_pairs: &mut Vec<(K, V)>) 
+    where
+        K: Clone,
+        V: Clone,
+    {
+        for i in 0..node.keys.len() {
+            if let Some(child) = node.children.get(i) {
+                Self::dfs(child, kv_pairs);
+            }
+            kv_pairs.push((node.keys[i].clone(), node.values[i].clone()));
+        }
+
+        if let Some(child) = node.children.last() {
+            Self::dfs(child, kv_pairs);
+        }
+    }
+
     pub fn insert(&mut self, key: K, value: V) {
         // Insert key-value pair and handle tree updates
         if let Some(root) = &mut self.root { // if root is not None

@@ -150,8 +150,8 @@ fn test_large_insert_delete() {
 #[test]
 fn test_large_random_insert_delete() {
     let mut tree = BTree::<String, i32>::new();
-    let mut keys: Vec<String> = (1..10000).map(|i| i.to_string()).collect();
-    let mut values: Vec<i32> = (1..10000).collect();
+    let mut keys: Vec<String> = (1..100000).map(|i| i.to_string()).collect();
+    let mut values: Vec<i32> = (1..100000).collect();
 
     let mut rng = thread_rng();
     keys.shuffle(&mut rng);
